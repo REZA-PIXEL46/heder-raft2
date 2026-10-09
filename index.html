@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>هدر رفت</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lalezar&family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0f2b2e;
+    --ink-2: #17403f;
+    --lemon: #f6e9a8;
+    --coral: #ff7a66;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { min-height: 100%; }
+  body {
+    background: var(--ink);
+    color: var(--lemon);
+    font-family: "Vazirmatn", Tahoma, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 6vh 6vw;
+    overflow-x: hidden;
+  }
+  .display { font-family: "Lalezar", "Vazirmatn", Tahoma, sans-serif; font-weight: 400; }
+  h1 {
+    font-size: clamp(2.6rem, 9vw, 7.5rem);
+    line-height: 1.25;
+  }
+  h1 span { display: block; }
+
+  .timer { margin-top: 5vh; color: var(--coral); font-size: clamp(1rem, 2.4vw, 1.3rem); }
+  .clock {
+    display: block;
+    font-size: clamp(2.6rem, 8vw, 5rem);
+    line-height: 1.2;
+    color: var(--lemon);
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+  }
+  .speed { margin-top: .4rem; font-size: 1.1rem; }
+  .speed b { color: var(--coral); font-size: 1.5em; }
+
+  .panel {
+    margin-top: 4vh;
+    width: min(92vw, 28rem);
+    background: var(--ink-2);
+    border-radius: 18px;
+    padding: 1.4rem 1.4rem 1.2rem;
+  }
+  .tokens { font-size: 1.15rem; }
+  .tokens b { font-size: 1.8em; color: var(--lemon); }
+  .bar {
+    margin: .9rem 0 .4rem;
+    height: 10px;
+    border-radius: 99px;
+    background: rgba(246, 233, 168, .15);
+    overflow: hidden;
+    direction: rtl;
+  }
+  .bar i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--coral);
+    border-radius: 99px;
+  }
+  .next { font-size: .9rem; opacity: .75; }
+  button.use {
+    margin-top: 1rem;
+    width: 100%;
+    font: inherit;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding: .8rem 1rem;
+    border: 0;
+    border-radius: 12px;
+    background: var(--coral);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button.use:disabled { background: rgba(246, 233, 168, .15); color: rgba(246, 233, 168, .5); cursor: not-allowed; }
+  button.use:not(:disabled):active { transform: scale(.98); }
+  button.reset {
+    margin-top: 1.6rem;
+    font: inherit;
+    font-size: .8rem;
+    background: none;
+    border: 0;
+    color: var(--lemon);
+    opacity: .45;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .flash { animation: flash .9s ease-out; }
+  @keyframes flash {
+    0% { transform: scale(1.12); color: var(--coral); }
+    100% { transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
+  @media (prefers-reduced-motion: no-preference) {
+    h1 { animation: rise 1.2s ease-out both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+</head>
+<body>
+  <h1 class="display">
+    <span>هدف از این سایت</span>
+    <span>فقط هدر رفت اینترنت</span>
+    <span>و وقت شماست</span>
+  </h1>
+
+  <p class="timer">وقتی که تا الان تلف کرده‌اید:
+    <span class="clock display" id="clock">۰۰:۰۰:۰۰</span>
+  </p>
+  <p class="speed">سرعت گذشتن زمان: <b class="display" id="speed">×۱</b></p>
+
+  <div class="panel">
+    <p class="tokens">توکن‌های شما: <b class="display" id="tokens">۰</b></p>
+    <div class="bar"><i id="fill"></i></div>
+    <p class="next" id="next">توکن بعدی تا ۱۰:۰۰ دیگر</p>
+    <button class="use" id="use" disabled>مصرف یک توکن: سرعت +۱</button>
+  </div>
+
+  <button class="reset" id="reset">شروع از صفر</button>
+
+<script>
+  const TOKEN_EVERY = 600;      // هر ۱۰ دقیقه (واقعی) یک توکن
+  const KEY = "wasteState.v1";
+
+  const fa = n => String(n).replace(/\d/g, d => "۰۱۲۳۴۵۶۷۸۹"[d]);
+  const pad = n => String(n).padStart(2, "0");
+
+  const fresh = () => ({ virtual: 0, real: 0, tokens: 0, speed: 1 });
+  let s;
+  try { s = Object.assign(fresh(), JSON.parse(localStorage.getItem(KEY) || "{}")); }
+  catch (e) { s = fresh(); }
+
+  const $ = id => document.getElementById(id);
+  const clock = $("clock"), speed = $("speed"), tokens = $("tokens"),
+        fill = $("fill"), next = $("next"), useBtn = $("use");
+
+  function fmtClock(sec) {
+    sec = Math.floor(sec);
+    const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), r = sec % 60;
+    return fa(pad(h)) + ":" + fa(pad(m)) + ":" + fa(pad(r));
+  }
+  function fmtMS(sec) {
+    sec = Math.ceil(sec);
+    return fa(pad(Math.floor(sec / 60))) + ":" + fa(pad(sec % 60));
+  }
+  function flash(el) {
+    el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+  }
+  function render() {
+    clock.textContent = fmtClock(s.virtual);
+    speed.textContent = "×" + fa(s.speed);
+    tokens.textContent = fa(s.tokens);
+    fill.style.width = (s.real / TOKEN_EVERY * 100) + "%";
+    next.textContent = "توکن بعدی تا " + fmtMS(TOKEN_EVERY - s.real) + " دیگر";
+    useBtn.disabled = s.tokens < 1;
+    useBtn.textContent = s.tokens < 1
+      ? "هنوز توکنی ندارید"
+      : "مصرف یک توکن: سرعت ×" + fa(s.speed) + " ← ×" + fa(s.speed + 1);
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {}
+  }
+
+  let last = Date.now(), lastSave = 0;
+  setInterval(() => {
+    const now = Date.now();
+    const dt = Math.min((now - last) / 1000, 5);   // جلوگیری از تقلب با خواب دستگاه
+    last = now;
+    s.real += dt;
+    s.virtual += dt * s.speed;
+    while (s.real >= TOKEN_EVERY) {
+      s.real -= TOKEN_EVERY;
+      s.tokens += 1;
+      flash(tokens);
+    }
+    render();
+    if (now - lastSave > 2000) { save(); lastSave = now; }
+  }, 100);
+
+  useBtn.addEventListener("click", () => {
+    if (s.tokens < 1) return;
+    s.tokens -= 1;
+    s.speed += 1;
+    flash(speed);
+    render(); save();
+  });
+
+  $("reset").addEventListener("click", () => {
+    if (confirm("همه‌چیز از صفر شروع بشه؟")) { s = fresh(); render(); save(); }
+  });
+
+  window.addEventListener("pagehide", save);
+  document.addEventListener("visibilitychange", () => { last = Date.now(); save(); });
+  render();
+</script>
+</body>
+</html>
